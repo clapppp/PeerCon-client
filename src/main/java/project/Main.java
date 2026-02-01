@@ -1,31 +1,24 @@
 package project;
 
-import dev.onvoid.webrtc.PeerConnectionFactory;
-
 import java.io.IOException;
-import java.nio.channels.DatagramChannel;
-import java.util.Scanner;
 
 public class Main {
-    public static int pulsePort = 8080;
-    public static final PeerConnectionFactory factory = new PeerConnectionFactory();
+    public final static int UDPPORT = 8080;
+    public final static int TCPPORT = 4000;
     public static String yourName;
+    public final static String SERVER_IP = "168.107.4.85";
 
     public static void main(String[] args) throws IOException {
-        System.out.println("Input Server Address : ");
-        Scanner sc = new Scanner(System.in);
-        String serverAddress = sc.nextLine();
-        if (serverAddress.isEmpty()) serverAddress = "127.0.0.1";
+        System.out.println("Server Address : " + SERVER_IP);
+        yourName = "user" + (int) (Math.random() * 10000);
+        System.out.println("Your Name : " + yourName);
 
-        System.out.println("Input Your Name : ");
-        yourName = sc.nextLine();
-        if (yourName.isEmpty()) yourName = "user" + (int) (Math.random() * 100);
+        UdpChannel udpChannel = new UdpChannel();
+        TcpChannel tcpChannel = new TcpChannel();
 
-        DatagramChannel channel = DatagramChannel.open();
-        channel.configureBlocking(true);
-
-        new Pulse(channel, serverAddress).run();
-        new SignalingClient(channel, serverAddress).run();
+        javax.swing.SwingUtilities.invokeLater(() -> {
+            new ClientGui(tcpChannel, udpChannel);
+        });
     }
 }
 
