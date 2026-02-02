@@ -1,30 +1,41 @@
 package project;
 
+import javax.imageio.ImageIO;
+import java.awt.*;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.DatagramChannel;
 import java.nio.charset.StandardCharsets;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 import static project.Main.*;
 
 public class UdpChannel {
     private DatagramChannel channel;
-    private final static ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+    private final static ScheduledExecutorService pulseScheduler = Executors.newSingleThreadScheduledExecutor();
+    private ScheduledFuture<?> pulseTask;
+    private final static ExecutorService p2pScheduler = Executors.newSingleThreadExecutor();
+    private Future<?> p2pTask;
     private final InetSocketAddress serverAddress;
     private Consumer<String> messageConsumer;
-    private ScheduledFuture<?> pulseTask;
-    private ScheduledFuture<?> p2pTask;
-    private volatile boolean connected = false;
+    private volatile boolean p2pMode = false;
+    private final AtomicReference<byte[]> latestFrame = new AtomicReference<>();
+    private Robot robot;
+    private Rectangle screenRect;
 
     UdpChannel() {
         try {
             this.channel = DatagramChannel.open();
             channel.configureBlocking(true);
+
+            if (!GraphicsEnvironment.isHeadless()) {
+                robot = new Robot();
+                screenRect = new Rectangle(Toolkit.getDefaultToolkit().getScreenSize());
+            }
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -41,9 +52,9 @@ public class UdpChannel {
         }
     }
 
-    public void send(String message, InetSocketAddress target) {
+    public void send(byte[] message, InetSocketAddress target) {
         try {
-            ByteBuffer buffer = ByteBuffer.wrap(message.getBytes());
+            ByteBuffer buffer = ByteBuffer.wrap(message);
             channel.send(buffer, target);
         } catch (Exception e) {
             e.printStackTrace();
@@ -67,26 +78,31 @@ public class UdpChannel {
                 System.err.println(e.getMessage());
             }
         };
-        pulseTask = scheduler.scheduleAtFixedRate(task, 0, 10, TimeUnit.SECONDS);
+        pulseTask = pulseScheduler.scheduleAtFixedRate(task, 0, 10, TimeUnit.SECONDS);
     }
 
     private void listenSignal() {
         Thread thread = new Thread(() -> {
             try {
-                ByteBuffer listenBuffer = ByteBuffer.allocate(1024);
+                ByteBuffer listenBuffer = ByteBuffer.allocate(65507);
                 while (true) {
                     listenBuffer.clear();
                     channel.receive(listenBuffer);
                     listenBuffer.flip();
-                    String message = StandardCharsets.UTF_8.decode(listenBuffer).toString();
-                    if (!connected) messageConsumer.accept(message);
-                    else System.out.println(message);
+                    byte[] data = new byte[listenBuffer.remaining()];
+                    listenBuffer.get(data);
+                    if (!p2pMode) messageConsumer.accept(new String(data, StandardCharsets.UTF_8)); //여기서 gui 로
+                    else latestFrame.set(data); //gui에서 여기로 조회
                 }
             } catch (Exception e) {
                 e.printStackTrace();
             }
         });
         thread.start();
+    }
+
+    public byte[] getLatestFrame() {
+        return latestFrame.getAndSet(null);
     }
 
     public void setPacketListener(Consumer<String> messageConsumer) {
@@ -99,20 +115,44 @@ public class UdpChannel {
         //quit 보내고
         send("quit " + yourName);
         //p2p 연결
-        connected = true;
-        p2pTask = scheduler.scheduleAtFixedRate(() -> {
+        p2pMode = true;
+        p2pTask = p2pScheduler.submit(() -> {
             try {
-                send(yourName, target);
+                while (p2pMode && !Thread.currentThread().isInterrupted()) {
+                    // 1. 화면 전체 캡처
+                    BufferedImage original = robot.createScreenCapture(screenRect);
+
+                    int newWidth = 800;
+                    int newHeight = (int) (original.getHeight() * (800.0 / original.getWidth()));
+
+                    BufferedImage resized = new BufferedImage(newWidth, newHeight, BufferedImage.TYPE_INT_RGB);
+                    Graphics2D g = resized.createGraphics();
+                    g.drawImage(original, 0, 0, newWidth, newHeight, null);
+                    g.dispose();
+
+                    // 3. JPG 압축 및 바이트 변환
+                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                    ImageIO.write(resized, "jpg", baos);
+                    byte[] imageBytes = baos.toByteArray();
+
+                    // 4. 전송 (64KB 넘는지 체크)
+                    if (imageBytes.length < 65507) {
+                        send(imageBytes, target);
+                    } else {
+                        // 여전히 크면 더 줄여서 재시도하거나 드랍 (여기선 로그만 출력)
+                        System.err.println("Frame dropped: too large (" + imageBytes.length + " bytes). Try lowering resolution.");
+                    }
+                }
             } catch (Exception e) {
                 e.printStackTrace();
             }
-        }, 0, 1, TimeUnit.SECONDS);
+        });
     }
 
     public void stopP2P() {
         //p2p stop
         p2pTask.cancel(true);
-        connected = false;
+        p2pMode = false;
         //pulse start
         startPulse();
     }
