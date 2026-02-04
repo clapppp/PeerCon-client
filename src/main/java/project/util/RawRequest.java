@@ -1,4 +1,4 @@
-package project;
+package project.util;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -47,10 +47,8 @@ public class RawRequest {
         return map;
     }
 
-    public Map<String, String> toStringToMap(String toString) {
-        String content = toString.substring(1, toString.length() - 1);
-
-        return Arrays.stream(content.split(", "))
+    public Map<String, String> toStringToMap(String string) {
+        return Arrays.stream(string.split(","))
                 .map(entry -> entry.split("=", 2))
                 .collect(Collectors.toMap(
                         parts -> parts[0].trim(),

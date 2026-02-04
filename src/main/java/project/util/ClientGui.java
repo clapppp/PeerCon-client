@@ -1,4 +1,8 @@
-package project;
+package project.util;
+
+import project.Main;
+import project.channel.TcpChannel;
+import project.channel.UdpChannel;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
@@ -32,9 +36,20 @@ public class ClientGui extends JFrame {
         this.tcpChannel = tcpChannel;
         this.udpChannel = udpChannel;
 
-        setTitle("P2P Client - " + Main.yourName);
+        setTitle("P2P Client - " + Main.NAME);
         setSize(800, 600); // 화면 공유를 위해 사이즈 좀 키움
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+
+        addWindowListener(new java.awt.event.WindowAdapter() {
+            @Override
+            public void windowClosing(java.awt.event.WindowEvent windowEvent) {
+                try {
+                    udpChannel.sendPulse("quit " + Main.NAME);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        });
 
         // 1. CardLayout 설정
         cardLayout = new CardLayout();
@@ -51,14 +66,13 @@ public class ClientGui extends JFrame {
         add(mainPanel);
 
         // UDP 연결 요청 리스너
-        this.udpChannel.setPacketListener(msg -> {
-            SwingUtilities.invokeLater(() -> showPopup(msg));
+        this.udpChannel.setMsgTrigger((msg, target) -> {
+            SwingUtilities.invokeLater(() -> showPopup(msg, target));
         });
 
         setVisible(true);
     }
 
-    // --- [화면 1] 메인 리스트 UI 생성 ---
     private void initListCard() {
         listCard = new JPanel(new BorderLayout());
 
@@ -82,7 +96,6 @@ public class ClientGui extends JFrame {
         listCard.add(new JScrollPane(peerList), BorderLayout.CENTER);
     }
 
-    // --- [화면 2] P2P 통신 UI 생성 ---
     private void initP2PCard() {
         p2pCard = new JPanel(new BorderLayout());
 
@@ -130,7 +143,7 @@ public class ClientGui extends JFrame {
 
     private void loadList() {
         refreshButton.setEnabled(false);
-        CompletableFuture.supplyAsync(() -> tcpChannel.getList())
+        CompletableFuture.supplyAsync(tcpChannel::getList)
                 .thenAccept(map -> {
                     SwingUtilities.invokeLater(() -> {
                         listModel.clear();
@@ -152,21 +165,11 @@ public class ClientGui extends JFrame {
         }
     }
 
-    private void showPopup(String msg) {
+    private void showPopup(String name, InetSocketAddress targetAddr) {
         try {
-            String[] parts = msg.split("\r\n", 2);
-            String name = parts[0];
-            String[] addrs = parts[1].split(":", 2);
-            String ip = addrs[0].substring(1);
-            int port = Integer.parseInt(addrs[1]);
-            InetSocketAddress addr = new InetSocketAddress(ip, port);
-
-            int choice = JOptionPane.showConfirmDialog(this,
-                    "UDP 연결 요청 from " + name + "\n수락하시겠습니까?\n" + addr);
-
+            int choice = JOptionPane.showConfirmDialog(this, "UDP 연결 요청 " + name + "\n수락하시겠습니까?\n");
             if (choice == JOptionPane.YES_OPTION) {
-                // 수락 시 바로 P2P 모드 진입
-                switchToP2PMode(addr);
+                switchToP2PMode(targetAddr);
             }
         } catch (Exception e) {
             e.printStackTrace();
