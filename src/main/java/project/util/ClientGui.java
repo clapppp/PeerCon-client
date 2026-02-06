@@ -114,6 +114,7 @@ public class ClientGui extends JFrame {
         renderTimer = new Timer(10, e -> videoPanel.repaint());
     }
 
+
     // --- 로직 메서드 ---
 
     // P2P 모드로 전환
@@ -193,13 +194,12 @@ public class ClientGui extends JFrame {
                     // (최적화를 위해선 매번 생성하지 말고 재사용하는게 좋지만 일단 기능 구현 위주)
                     currentImage = ImageIO.read(new ByteArrayInputStream(data));
                 } catch (Exception e) {
-                    // 이미지 변환 실패 (깨진 패킷 등) -> 무시
+                    e.printStackTrace();
                 }
             }
 
             // 2. 이미지가 있으면 그리기
             if (currentImage != null) {
-                // 화면 꽉 차게 리사이징해서 그리기
                 g.drawImage(currentImage, 0, 0, getWidth(), getHeight(), this);
             } else {
                 // 대기 화면

@@ -7,7 +7,10 @@ import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.DatagramChannel;
 import java.nio.charset.StandardCharsets;
-import java.util.concurrent.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
 
@@ -20,9 +23,7 @@ public class UdpChannel {
     private InetSocketAddress targetAddress;
     private final InetSocketAddress serverAddress;
     private final static ScheduledExecutorService pulseScheduler = Executors.newSingleThreadScheduledExecutor();
-    private ScheduledFuture<?> pulseTask;
     private final static ExecutorService p2pScheduler = Executors.newSingleThreadExecutor();
-    private Future<?> p2pTask;
     private BiConsumer<String, InetSocketAddress> msgTrigger;
     private volatile boolean p2pMode = false;
     private final AtomicReference<byte[]> latestFrame = new AtomicReference<>();
@@ -99,14 +100,13 @@ public class UdpChannel {
     }
 
     public void startPulse() {
-        Runnable task = () -> {
+        pulseScheduler.scheduleAtFixedRate(() -> {
             try {
-                sendPulse(NAME + " " + privateAddress + " " + isSymmetric);
+                if (!p2pMode) sendPulse(NAME + " " + privateAddress + " " + isSymmetric);
             } catch (Exception e) {
                 System.err.println(e.getMessage());
             }
-        };
-        pulseTask = pulseScheduler.scheduleAtFixedRate(task, 0, 10, TimeUnit.SECONDS);
+        }, 0, 10, TimeUnit.SECONDS);
     }
 
     private void listenSignal() {
@@ -151,10 +151,9 @@ public class UdpChannel {
     }
 
     public void startP2P(InetSocketAddress target) {
-        pulseTask.cancel(true);
         sendPulse("quit " + NAME);
 
-        p2pTask = p2pScheduler.submit(() -> {
+        p2pScheduler.submit(() -> {
             try {
                 while (p2pMode && !Thread.currentThread().isInterrupted()) {
                     byte[] imageBytes = Util.captureScreen(robot, screenRect);
@@ -172,9 +171,6 @@ public class UdpChannel {
     }
 
     public void stopP2P() {
-        p2pTask.cancel(true);
         p2pMode = false;
-
-        startPulse();
     }
 }
