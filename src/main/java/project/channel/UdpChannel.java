@@ -7,6 +7,7 @@ import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.DatagramChannel;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -114,11 +115,16 @@ public class UdpChannel {
             try {
                 while (true) {
                     byte[] data = Util.receiveUdpToByte(channel);
-                    if (!p2pMode) {
+                    if (!p2pMode && data.length < 10000) {
                         String name = handleTarget(new String(data, StandardCharsets.UTF_8));
                         msgTrigger.accept(name, targetAddress);
                         p2pMode = true;
                     } else {
+                        if (Arrays.equals(data, "end".getBytes(StandardCharsets.UTF_8))) {
+                            p2pMode = false;
+                            System.out.println("OPPONENT ENDED P2P");
+                            continue;
+                        }
                         latestFrame.set(data);
                         System.out.println("set latestFrame");
                     }
@@ -171,6 +177,11 @@ public class UdpChannel {
     }
 
     public void stopP2P() {
+        try {
+            channel.send(ByteBuffer.wrap("end".getBytes(StandardCharsets.UTF_8)), targetAddress);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
         p2pMode = false;
     }
 }
