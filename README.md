@@ -1,33 +1,35 @@
-# PeerCon
-
 ## Overview
 **PeerCon** is a peer-to-peer desktop sharing application built entirely with **Java JDK**, utilizing **no external dependencies**.
-
 I started this project while studying **Netty**. I wanted to explore **pure Java networking (Java NIO)** without relying on abstraction layers like Netty. I aim to understand the core mechanisms of low-level networking, including **UDP hole punching** and **non-blocking I/O**.
 
+## Screenshots
+<img src="./images/peercon_screenvideo.gif" alt="ScreenGIF" width="600" />
+This shows a screen being shared with another PC in real time.
+
 ## Architecture
-This project consists of two main components: **Server** and **Client**.
+<img src="./images/peercon_architecture.png" alt="Architecture" width="600" />
+- The server handles requests using a selector and worker-thread architecture.
+- The client uses blocking channels because the request volume is not high.
+- After a connection is established via UDP hole punching, screen sharing is implemented by capturing the screen and transmitting the captured frames between peers.
 
-### Server ([Link to Repository](https://github.com/clapppp/PeerCon-server))
-The server acts as a lightweight **STUN server** and signaling coordinator.
-- **NAT Type Detection:** Determines if a client is behind a **Symmetric NAT** or a Cone NAT.
-- **Connection Maintenance:** Manages the active client list by receiving periodic **UDP pulses**.
-- **Peer Discovery:** When a client requests a P2P connection, the server provides the target client's public IP and port to facilitate direct communication.
+## Learnings
+#### [Server](https://github.com/clapppp/PeerCon-Server)
+- Understood the roles of STUN and TURN servers in direct peer-to-peer communication environments.
+- Learned when to use blocking I/O and why a selector is needed to manage multiple sockets with non-blocking I/O.
+- Identified the limitations of P2P communication under symmetric NAT/router environments and the need for a TURN server.
+- Designed a custom protocol and handled raw data directly.
+- Implemented TCP and UDP communication using Java NIO.
+#### Client
+- Built screen capture and compression features using Java’s Robot class.
+- Implemented direct communication through NAT hole punching.
+- Investigated issues caused by symmetric NAT environments and applied appropriate workarounds.
+- Understood why private IP-based communication is needed when peers are under the same public IP.
+- Designed a custom protocol and handled raw data directly.
+- Built TCP and UDP communication features using Java NIO.
 
-### Client
-The client handles peer-to-peer connection establishment and screen streaming.
-- **Heartbeat Mechanism:** Sends periodic UDP pulses to the server containing metadata (Username, Public/Private IP, NAT Type) to keep the NAT mapping alive.
-- **P2P Establishment:** Once a target peer is selected, it retrieves the target's IP from the server and initiates **UDP Hole Punching**.
-- **Screen Sharing:** Captures the desktop screen using `java.awt.Robot` and streams it to the connected peer.
-
-## Challenges
-
-### 1. Symmetric NAT Traversal
-- **Issue:** Under a **Symmetric NAT**, standard UDP hole punching is unavailable.
-- **Solution:** To solve this, a **Relay Server (TURN)** implementation is required to bridge traffic when direct P2P fails.
-
-### 2. High Resolution & Packet Fragmentation
-- **Issue:** For higher resolution screen sharing, simple image compression is not enough. Since the application currently sends raw compressed data over UDP, frames larger than the **MTU (Maximum Transmission Unit)** cause packet loss.
-- **Solution:** A **Custom Application-Layer Protocol** is needed to handle:
-    - **Packet Fragmentation:** Splitting large image frames into smaller UDP packets.
-    - **Reassembly:** Reordering and rebuilding frames at the receiver end to ensure smooth rendering.
+## How to run
+```
+git clone https://github.com/clapppp/PeerCon-client.git
+cd PeerCon-client/target
+java -jar client-1.0.jar
+```
