@@ -1,5 +1,5 @@
 ## Overview
-**PeerCon** is a peer-to-peer desktop sharing application built entirely with **Java JDK**, utilizing **no external dependencies**.
+**PeerCon** is a peer-to-peer desktop sharing application built entirely with **Java JDK**, utilizing **no external dependencies**.  
 I started this project while studying **Netty**. I wanted to explore **pure Java networking (Java NIO)** without relying on abstraction layers like Netty. I aim to understand the core mechanisms of low-level networking, including **UDP hole punching** and **non-blocking I/O**.
 
 ## Screenshots
